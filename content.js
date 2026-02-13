@@ -37,43 +37,91 @@
             align-items: center;
             justify-content: center;
             color: #c4c7c5; /* Gris Google Dark */
-            transition: background-color 0.2s, color 0.2s;
-            margin-right: 8px; /* Espace avec le bouton envoyer */
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1); /* Snappy transition */
+            margin-right: 8px;
             box-sizing: border-box;
+            position: relative;
         }
 
         #voxtral-btn:hover {
-            background-color: rgba(255, 255, 255, 0.08);
-            color: #e3e3e3;
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #f0f0f0;
+            transform: scale(1.05);
+            box-shadow: 0 0 12px rgba(255, 255, 255, 0.1);
+        }
+
+        #voxtral-btn:active {
+            transform: scale(0.92); /* Click feedback */
+            background-color: rgba(255, 255, 255, 0.15);
         }
 
         /* État Enregistrement */
         #voxtral-btn.recording {
-            color: #e8eaed;
-            background-color: rgba(220, 50, 50, 0.3);
-            animation: pulse-ring 2s infinite;
+            color: white;
+            background-color: rgba(220, 50, 50, 0.9);
+            box-shadow: 0 0 0 4px rgba(220, 50, 50, 0.3);
+            animation: pulse-recording 2s infinite;
         }
-        #voxtral-btn.recording svg { fill: #ff8888; }
+        #voxtral-btn.recording svg { fill: white; }
 
-        @keyframes pulse-ring {
-            0% { box-shadow: 0 0 0 0 rgba(255, 100, 100, 0.2); }
-            70% { box-shadow: 0 0 0 8px rgba(255, 100, 100, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(255, 100, 100, 0); }
+        @keyframes pulse-recording {
+            0% { box-shadow: 0 0 0 0 rgba(220, 50, 50, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(220, 50, 50, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(220, 50, 50, 0); }
         }
 
-        .voxtral-spin { animation: spin 1s linear infinite; }
-        @keyframes spin { 100% { transform: rotate(360deg); } }
+        /* État Loading */
+        #voxtral-btn.loading {
+            background-color: rgba(66, 133, 244, 0.15);
+            cursor: wait;
+        }
+        #voxtral-btn.loading svg { fill: #a8c7fa; }
+
+        .voxtral-spin { 
+            animation: spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite; 
+            opacity: 0.8;
+            transform-origin: center;
+        }
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
 
         /* MODAL SETTINGS */
-        #v-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2147483647; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); font-family: 'Google Sans', Roboto, sans-serif; }
-        .v-box { background: #1e1f20; padding: 24px; border-radius: 16px; width: 400px; border: 1px solid #444; color: #e3e3e3; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .v-label { display: block; margin-top: 15px; font-size: 13px; color: #aaa; }
-        .v-inp { width: 100%; padding: 12px; margin-top: 5px; background: #0b0c0c; border: 1px solid #444; color: white; border-radius: 8px; box-sizing: border-box; font-family: monospace; }
-        .v-inp:focus { border-color: #a8c7fa; outline: none; }
-        .v-btns { text-align: right; margin-top: 20px; }
-        .v-btn { padding: 10px 20px; border-radius: 20px; border: none; cursor: pointer; margin-left: 10px; font-weight: 500; }
-        .v-save { background: #a8c7fa; color: #000; }
-        .v-cancel { background: transparent; color: #a8c7fa; border: 1px solid #444; }
+        #v-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2147483647; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); font-family: 'Google Sans', Roboto, sans-serif; }
+        .v-box { background: #1e1f20; padding: 24px; border-radius: 20px; width: 400px; border: 1px solid #444; color: #e3e3e3; box-shadow: 0 20px 50px rgba(0,0,0,0.6); transform: scale(1); animation: modalPop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        @keyframes modalPop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        
+        .v-label { display: block; margin-top: 15px; font-size: 13px; color: #aaa; font-weight: 500; margin-left: 4px; }
+        .v-inp { width: 100%; padding: 12px 14px; margin-top: 6px; background: #0b0c0c; border: 1px solid #444; color: white; border-radius: 12px; box-sizing: border-box; font-family: monospace; transition: border-color 0.2s; }
+        .v-inp:focus { border-color: #a8c7fa; outline: none; background: #131414; }
+        
+        .v-btns { text-align: right; margin-top: 24px; display: flex; justify-content: flex-end; gap: 10px; }
+        .v-btn { 
+            padding: 10px 20px; 
+            border-radius: 12px; 
+            border: none; 
+            cursor: pointer; 
+            font-weight: 600; 
+            transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1); 
+            font-size: 14px; 
+        }
+        
+        .v-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        .v-btn:active { transform: translateY(0) scale(0.96); }
+
+        .v-save { 
+            background: #a8c7fa; 
+            color: #001d35; 
+        }
+        .v-save:hover { background: #b3d1ff; box-shadow: 0 4px 12px rgba(168, 199, 250, 0.3); }
+
+        .v-cancel { 
+            background: transparent; 
+            color: #a8c7fa; 
+            border: 1px solid rgba(168, 199, 250, 0.3); 
+        }
+        .v-cancel:hover { background: rgba(168, 199, 250, 0.08); border-color: #a8c7fa; }
     `;
     document.head.appendChild(style);
 
@@ -86,7 +134,7 @@
     const ICONS = {
         equalizer: "M4 9h4v6H4V9zm5-4h4v14H9V5zm5 4h4v6h-4V9z",
         stop: "M8 8h8v8H8z",
-        loader: "M12 4V2C6.48 2 2 6.48 2 12h2c0-4.42 3.58-8 8-8zm0 14c4.42 0 8-3.58 8-8h2c0 5.52-4.48 10-10 10v-2z"
+        loader: "M12,4V2A10,10,0,0,0,2,12H4A8,8,0,0,1,12,4ZM22,12A10,10,0,0,0,12,2V4A8,8,0,0,1,20,12Z"
     };
 
     function setIcon(state) {
@@ -201,18 +249,28 @@
         } catch(e) { alert("Microphone bloqué."); return; }
 
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        audioInput = audioContext.createMediaStreamSource(mediaStream);
-        processor = audioContext.createScriptProcessor(2048, 1, 1);
         
+        // Load AudioWorklet
+        try {
+            await audioContext.audioWorklet.addModule(chrome.runtime.getURL('processor.js'));
+        } catch(e) {
+            console.error("Failed to load processor", e);
+            alert("Erreur chargement audio");
+            return;
+        }
+
+        audioInput = audioContext.createMediaStreamSource(mediaStream);
+        processor = new AudioWorkletNode(audioContext, 'voice-processor');
+        
+        processor.port.onmessage = (e) => {
+            if (!isRecording) return;
+            const chunk = e.data;
+            leftchannel.push(new Float32Array(chunk));
+            recordingLength += chunk.length;
+        };
+
         audioInput.connect(processor);
         processor.connect(audioContext.destination);
-        
-        processor.onaudioprocess = (e) => {
-            if (!isRecording) return;
-            const left = e.inputBuffer.getChannelData(0);
-            leftchannel.push(new Float32Array(left));
-            recordingLength += leftchannel[0].length;
-        };
 
         isRecording = true;
         btn.classList.add('recording');
@@ -223,8 +281,13 @@
         isRecording = false;
         setIcon('loading');
         btn.classList.remove('recording');
+        btn.classList.add('loading');
 
         if(mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+        
+        // Disconnect nodes
+        if(processor) processor.disconnect();
+        if(audioInput) audioInput.disconnect();
         if(audioContext) await audioContext.close();
 
         const wavBlob = encodeWAV();
@@ -234,8 +297,10 @@
         } catch(e) { 
             console.error(e); 
             alert("Erreur réseau"); 
+        } finally {
+            setIcon('idle');
+            btn.classList.remove('loading');
         }
-        setIcon('idle');
     }
 
     // --- 7. API CALL ---
@@ -252,7 +317,7 @@
                 messages: [{
                     role: "user",
                     content: [
-                        { type: "text", text: "Transcribe the audio verbatim in the spoken language. Output ONLY the text." },
+                        { type: "text", text: "Transcribe the audio exactly as spoken. Detect the language automatically and transcribe in that language. Do NOT translate. Output ONLY the text." },
                         { type: "input_audio", input_audio: { data: base64, format: "wav" } }
                     ]
                 }]
@@ -285,9 +350,26 @@
 
     // --- 8. UTILS ---
     function encodeWAV() {
+        // Use actual sample rate or default to 44100 if undefined
+        const sampleRate = audioContext ? audioContext.sampleRate : 44100;
+
         let buffer = new ArrayBuffer(44 + recordingLength * 2);
         let view = new DataView(buffer);
-        writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + recordingLength * 2, true); writeString(view, 8, 'WAVE'); writeString(view, 12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, 44100, true); view.setUint32(28, 44100 * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true); writeString(view, 36, 'data'); view.setUint32(40, recordingLength * 2, true);
+        
+        writeString(view, 0, 'RIFF'); 
+        view.setUint32(4, 36 + recordingLength * 2, true); 
+        writeString(view, 8, 'WAVE'); 
+        writeString(view, 12, 'fmt '); 
+        view.setUint32(16, 16, true); 
+        view.setUint16(20, 1, true); 
+        view.setUint16(22, 1, true); 
+        view.setUint32(24, sampleRate, true); 
+        view.setUint32(28, sampleRate * 2, true); 
+        view.setUint16(32, 2, true); 
+        view.setUint16(34, 16, true); 
+        writeString(view, 36, 'data'); 
+        view.setUint32(40, recordingLength * 2, true);
+        
         let offset = 44;
         for (let i = 0; i < leftchannel.length; i++) {
             let chunk = leftchannel[i];
