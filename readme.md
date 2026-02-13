@@ -26,7 +26,7 @@ Since this modifies the Google interface, it is not on the Chrome Web Store.
     ```bash
     git clone https://github.com/0n3m0r3/gemini-openrouter-voice.git
     ```
-    or download the ZIP.
+    or download the ZIP and unzip it.
 2.  Open Chrome/Brave/Edge and go to `chrome://extensions`.
 3.  Enable **Developer mode** (top right).
 4.  Click **Load unpacked**.
