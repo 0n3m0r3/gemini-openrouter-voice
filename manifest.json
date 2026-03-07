@@ -4,13 +4,19 @@
   "version": "1.0",
   "description": "Intégration vocale native pour Gemini via OpenRouter",
   "permissions": [
-    "storage", 
+    "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "declarativeNetRequest"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "host_permissions": [
     "https://openrouter.ai/*",
-    "https://gemini.google.com/*"
+    "https://gemini.google.com/*",
+    "https://api.mistral.ai/*",
+    "wss://api.mistral.ai/*"
   ],
   "content_scripts": [
     {

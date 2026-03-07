@@ -8,13 +8,18 @@
     console.log("🦾 Gemini Voice : Mode Intégration Natif");
 
     const DEFAULT_MODEL = "mistralai/voxtral-small-24b-2507";
-    
+    // Mistral Voxtral Realtime model (fixed — no user-selectable model for this mode)
+    const MISTRAL_REALTIME_MODEL = "voxtral-mini-transcribe-realtime-2602";
+
     // Configuration globale (chargée en async)
-    let config = { apiKey: "", modelId: DEFAULT_MODEL };
-    
-    chrome.storage.local.get(['OPENROUTER_API_KEY', 'OPENROUTER_MODEL_ID'], (res) => {
+    let config = { apiKey: "", modelId: DEFAULT_MODEL, mistralApiKey: "", voiceMode: "openrouter" };
+
+    chrome.storage.local.get(['OPENROUTER_API_KEY', 'OPENROUTER_MODEL_ID', 'MISTRAL_API_KEY', 'VOICE_MODE'], (res) => {
         if(res.OPENROUTER_API_KEY) config.apiKey = res.OPENROUTER_API_KEY;
         if(res.OPENROUTER_MODEL_ID) config.modelId = res.OPENROUTER_MODEL_ID;
+        if(res.MISTRAL_API_KEY) config.mistralApiKey = res.MISTRAL_API_KEY;
+        if(res.VOICE_MODE) config.voiceMode = res.VOICE_MODE;
+        updateButtonMode();
     });
 
     // --- 1. STYLES CSS (Natif Google) ---
@@ -122,13 +127,46 @@
             border: 1px solid rgba(168, 199, 250, 0.3); 
         }
         .v-cancel:hover { background: rgba(168, 199, 250, 0.08); border-color: #a8c7fa; }
+
+        /* Mode indicator badge on button */
+        #voxtral-btn.mistral-mode::after {
+            content: 'M';
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            width: 13px;
+            height: 13px;
+            font-size: 8px;
+            font-weight: 700;
+            background: #ff6b35;
+            color: white;
+            border-radius: 50%;
+            line-height: 13px;
+            text-align: center;
+        }
+
+        /* Mode toggle in settings */
+        .v-mode-toggle { display: flex; gap: 6px; margin-bottom: 8px; background: #0b0c0c; padding: 4px; border-radius: 12px; }
+        .v-mode-btn { flex: 1; padding: 8px 0; border: none; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600; background: transparent; color: #888; transition: all 0.15s; }
+        .v-mode-btn.active { background: #2a2b2c; color: #e3e3e3; box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+        .v-mode-btn[data-mode="mistral"].active { color: #ff9a72; }
+        .v-hint { font-size: 12px; color: #666; margin: 8px 0 0 4px; font-family: monospace; }
     `;
     document.head.appendChild(style);
 
     // --- 2. LOGIQUE AUDIO ---
     let isRecording = false;
+
+    // OpenRouter mode state
     let audioContext, mediaStream, processor, audioInput;
     let leftchannel = [], recordingLength = 0;
+
+    // Mistral Realtime mode state
+    let mistralWs = null;
+    let mistralAudioCtx = null;
+    let mistralStream = null;
+    let mistralProcessor = null;
+    let mistralAudioInput = null;
 
     // --- 3. ICONS SVG ---
     const ICONS = {
@@ -166,12 +204,26 @@
     const btn = document.createElement('button');
     btn.id = 'voxtral-btn';
     btn.title = "Clic Gauche: Parler / Clic Droit: Config";
-    
+
+    function updateButtonMode() {
+        if (config.voiceMode === 'mistral') {
+            btn.classList.add('mistral-mode');
+            btn.title = "Mistral Realtime | Clic Gauche: Parler / Clic Droit: Config";
+        } else {
+            btn.classList.remove('mistral-mode');
+            btn.title = "OpenRouter | Clic Gauche: Parler / Clic Droit: Config";
+        }
+    }
+
     // Clic gauche : Enregistrement
-    btn.onclick = (e) => { 
+    btn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (!isRecording) startRecording(); else stopRecording(); 
+        if (config.voiceMode === 'mistral') {
+            if (!isRecording) startRecordingMistral(); else stopRecordingMistral();
+        } else {
+            if (!isRecording) startRecording(); else stopRecording();
+        }
     };
 
     // Clic droit : Configuration
@@ -206,18 +258,38 @@
 
 
     // --- 5. SETTINGS UI ---
+    function escHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
     function showSettings() {
         if(document.getElementById('v-modal')) return;
-        
+
+        const isOR = config.voiceMode !== 'mistral';
         const modal = document.createElement('div');
         modal.id = 'v-modal';
         modal.innerHTML = `
             <div class="v-box">
-                <h3 style="margin:0 0 10px 0">Paramètres Voix</h3>
-                <label class="v-label">Clé API OpenRouter :</label>
-                <input type="password" id="v-key" class="v-inp" placeholder="sk-or-..." value="${config.apiKey}">
-                <label class="v-label">Modèle ID :</label>
-                <input type="text" id="v-model" class="v-inp" value="${config.modelId}">
+                <h3 style="margin:0 0 16px 0">Paramètres Voix</h3>
+                <div class="v-mode-toggle">
+                    <button class="v-mode-btn ${isOR ? 'active' : ''}" data-mode="openrouter">OpenRouter</button>
+                    <button class="v-mode-btn ${!isOR ? 'active' : ''}" data-mode="mistral">Mistral Realtime</button>
+                </div>
+                <div id="v-section-or" style="display:${isOR ? 'block' : 'none'}">
+                    <label class="v-label">Clé API OpenRouter :</label>
+                    <input type="password" id="v-key" class="v-inp" placeholder="sk-or-..." value="${escHtml(config.apiKey)}">
+                    <label class="v-label">Modèle ID :</label>
+                    <input type="text" id="v-model" class="v-inp" value="${escHtml(config.modelId)}">
+                </div>
+                <div id="v-section-m" style="display:${!isOR ? 'block' : 'none'}">
+                    <label class="v-label">Clé API Mistral :</label>
+                    <input type="password" id="v-mistral-key" class="v-inp" placeholder="..." value="${escHtml(config.mistralApiKey)}">
+                    <p class="v-hint">Modèle fixe : voxtral-mini-transcribe-realtime-2602</p>
+                </div>
                 <div class="v-btns">
                     <button id="v-cancel" class="v-btn v-cancel">Annuler</button>
                     <button id="v-save" class="v-btn v-save">Sauvegarder</button>
@@ -226,20 +298,217 @@
         `;
         document.body.appendChild(modal);
 
+        // Mode toggle logic
+        modal.querySelectorAll('.v-mode-btn').forEach(mBtn => {
+            mBtn.addEventListener('click', () => {
+                modal.querySelectorAll('.v-mode-btn').forEach(b => b.classList.remove('active'));
+                mBtn.classList.add('active');
+                const m = mBtn.dataset.mode;
+                document.getElementById('v-section-or').style.display = m === 'openrouter' ? 'block' : 'none';
+                document.getElementById('v-section-m').style.display = m === 'mistral' ? 'block' : 'none';
+            });
+        });
+
         document.getElementById('v-save').onclick = () => {
-            const k = document.getElementById('v-key').value.trim();
-            const m = document.getElementById('v-model').value.trim();
-            chrome.storage.local.set({ 'OPENROUTER_API_KEY': k, 'OPENROUTER_MODEL_ID': m }, () => {
+            const k   = document.getElementById('v-key').value.trim();
+            const m   = document.getElementById('v-model').value.trim();
+            const mk  = document.getElementById('v-mistral-key').value.trim();
+            const mode = modal.querySelector('.v-mode-btn.active')?.dataset.mode || 'openrouter';
+            chrome.storage.local.set({
+                'OPENROUTER_API_KEY': k,
+                'OPENROUTER_MODEL_ID': m,
+                'MISTRAL_API_KEY': mk,
+                'VOICE_MODE': mode
+            }, () => {
                 config.apiKey = k;
                 config.modelId = m;
+                config.mistralApiKey = mk;
+                config.voiceMode = mode;
+                // Keep the background worker's declarativeNetRequest rule in sync.
+                chrome.runtime.sendMessage({ type: 'UPDATE_MISTRAL_AUTH', apiKey: mk });
+                updateButtonMode();
                 modal.remove();
             });
         };
         document.getElementById('v-cancel').onclick = () => modal.remove();
-        modal.onclick = (e) => { if(e.target === modal) modal.remove(); }
+        modal.onclick = (e) => { if(e.target === modal) modal.remove(); };
     }
 
-    // --- 6. AUDIO ENGINE (WAV) ---
+    // --- 6. MISTRAL REALTIME ENGINE ---
+
+    /**
+     * Converts a Float32Array (range -1..1) to base64-encoded PCM signed 16-bit LE bytes.
+     * This is the pcm_s16le format expected by the Mistral Realtime API.
+     */
+    function float32ToPcm16Base64(float32Array) {
+        const int16 = new Int16Array(float32Array.length);
+        for (let i = 0; i < float32Array.length; i++) {
+            const s = Math.max(-1, Math.min(1, float32Array[i]));
+            int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        const bytes = new Uint8Array(int16.buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+        return btoa(binary);
+    }
+
+    async function startRecordingMistral() {
+        if (!config.mistralApiKey) { showSettings(); return; }
+
+        try {
+            mistralStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch(e) {
+            alert("Microphone bloqué.");
+            return;
+        }
+
+        // The browser WebSocket API cannot set custom HTTP headers.
+        // Instead, the background service worker uses declarativeNetRequest to
+        // inject "Authorization: Bearer <key>" on every upgrade request to this
+        // endpoint automatically — so no credentials appear in the URL.
+        const wsUrl = `wss://api.mistral.ai/v1/audio/transcriptions/realtime` +
+                      `?model=${encodeURIComponent(MISTRAL_REALTIME_MODEL)}`;
+
+        try {
+            mistralWs = new WebSocket(wsUrl);
+        } catch(e) {
+            console.error("Failed to create Mistral WebSocket", e);
+            alert("Erreur WebSocket Mistral");
+            if (mistralStream) { mistralStream.getTracks().forEach(t => t.stop()); mistralStream = null; }
+            return;
+        }
+
+        // Track whether the close was expected (transcription done or user stopped)
+        // so onclose knows whether to show a diagnostic message.
+        let expectedClose = false;
+
+        // Pre-load the audio worklet while waiting for the WS handshake.
+        // We create the AudioContext first (only thing needed for addModule).
+        mistralAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const sampleRate = mistralAudioCtx.sampleRate;
+        let workletReady = false;
+        mistralAudioCtx.audioWorklet.addModule(chrome.runtime.getURL('processor.js'))
+            .then(() => { workletReady = true; })
+            .catch(e => console.error("Failed to load audio processor", e));
+
+        mistralWs.onopen = () => {
+            // Send session config only after the WebSocket handshake succeeds.
+            // session.update is sent here; we wait for session.created from the server
+            // before starting audio (handled in onmessage) to follow the correct protocol order.
+            console.debug('[Mistral] WS open, waiting for session.created');
+        };
+
+        mistralWs.onmessage = async (event) => {
+            let msg;
+            try { msg = JSON.parse(event.data); } catch { return; }
+
+            if (msg.type === 'session.created') {
+                // Server is ready — now send format config and begin audio capture.
+                // Wait for the worklet module if it is still loading (should be done by now).
+                if (!workletReady) {
+                    const deadline = Date.now() + 3000;
+                    while (!workletReady && Date.now() < deadline) {
+                        await new Promise(r => setTimeout(r, 20));
+                    }
+                    if (!workletReady) {
+                        alert("Erreur chargement audio worklet.");
+                        if (mistralWs) mistralWs.close(1000, 'worklet failed');
+                        return;
+                    }
+                }
+
+                // Safety check: WS might have closed while we were awaiting.
+                if (!mistralWs || mistralWs.readyState !== WebSocket.OPEN) return;
+
+                mistralWs.send(JSON.stringify({
+                    type: 'session.update',
+                    session: { audio_format: { encoding: 'pcm_s16le', sample_rate: sampleRate } }
+                }));
+
+                mistralAudioInput = mistralAudioCtx.createMediaStreamSource(mistralStream);
+                mistralProcessor = new AudioWorkletNode(mistralAudioCtx, 'voice-processor');
+                mistralProcessor.port.onmessage = (evt) => {
+                    if (!isRecording || !mistralWs || mistralWs.readyState !== WebSocket.OPEN) return;
+                    const audio = float32ToPcm16Base64(new Float32Array(evt.data));
+                    mistralWs.send(JSON.stringify({ type: 'input_audio.append', audio }));
+                };
+                mistralAudioInput.connect(mistralProcessor);
+                mistralProcessor.connect(mistralAudioCtx.destination);
+
+                isRecording = true;
+                btn.classList.add('recording');
+                setIcon('recording');
+
+            } else if (msg.type === 'transcription.text.delta') {
+                // Insert each chunk as it arrives — the cursor advances naturally
+                // with each execCommand call, producing a live typewriter effect.
+                // trimText=false preserves the inter-word spaces that the API embeds
+                // at the start/end of each delta chunk.
+                if (msg.text) insertText(msg.text, false);
+
+            } else if (msg.type === 'transcription.done') {
+                // All text has already been streamed via deltas; nothing to insert.
+                // Just close the connection cleanly.
+                expectedClose = true;
+                if (mistralWs) mistralWs.close(1000, 'transcription complete');
+
+            } else if (msg.type === 'error') {
+                console.error('Mistral Realtime error:', msg);
+                const errMsg = msg.error?.message || msg.message || JSON.stringify(msg);
+                alert('Erreur Mistral Realtime:\n' + errMsg);
+                expectedClose = true;
+                if (mistralWs) mistralWs.close(1000, 'api error');
+            }
+        };
+
+        mistralWs.onerror = (e) => {
+            console.error('Mistral WebSocket error', e);
+        };
+
+        // onclose is the single cleanup point for all paths (normal, error, unexpected).
+        mistralWs.onclose = (evt) => {
+            isRecording = false;
+            btn.classList.remove('recording', 'loading');
+            setIcon('idle');
+
+            if (mistralProcessor) { try { mistralProcessor.disconnect(); } catch(_) {} mistralProcessor = null; }
+            if (mistralAudioInput) { try { mistralAudioInput.disconnect(); } catch(_) {} mistralAudioInput = null; }
+            if (mistralAudioCtx) { mistralAudioCtx.close(); mistralAudioCtx = null; }
+            if (mistralStream) { mistralStream.getTracks().forEach(t => t.stop()); mistralStream = null; }
+            mistralWs = null;
+
+            if (!expectedClose) {
+                const code = evt.code || '?';
+                const reason = evt.reason ? `\n"${evt.reason}"` : '';
+                alert(`Connexion Mistral fermée inopinément (code ${code})${reason}\n\nVérifiez votre clé API Mistral et rechargez l'extension.`);
+            }
+        };
+    }
+
+    async function stopRecordingMistral() {
+        if (!isRecording) return;
+        isRecording = false;
+        btn.classList.remove('recording');
+        btn.classList.add('loading');
+        setIcon('loading');
+
+        // Freeze the audio graph so no further chunks are sent.
+        if (mistralProcessor) { try { mistralProcessor.disconnect(); } catch(_) {} mistralProcessor = null; }
+        if (mistralAudioInput) { try { mistralAudioInput.disconnect(); } catch(_) {} mistralAudioInput = null; }
+        if (mistralStream) { mistralStream.getTracks().forEach(t => t.stop()); mistralStream = null; }
+        if (mistralAudioCtx) { await mistralAudioCtx.close(); mistralAudioCtx = null; }
+
+        // Signal end of audio — server replies with transcription.done, then onclose fires.
+        if (mistralWs && mistralWs.readyState === WebSocket.OPEN) {
+            mistralWs.send(JSON.stringify({ type: 'input_audio.flush' }));
+            mistralWs.send(JSON.stringify({ type: 'input_audio.end' }));
+        } else {
+            btn.classList.remove('loading');
+            setIcon('idle');
+        }
+    }
+
+    // --- 7. AUDIO ENGINE (WAV) ---
     async function startRecording() {
         if(!config.apiKey) { showSettings(); return; }
         
@@ -332,11 +601,11 @@
         }
     }
 
-    function insertText(text) {
+    function insertText(text, trimText = true) {
         const editor = document.querySelector('div[contenteditable="true"]') || document.querySelector('textarea');
         if (editor) {
             editor.focus();
-            const clean = text.trim();
+            const clean = trimText ? text.trim() : text;
             // Insertion native
             const success = document.execCommand('insertText', false, clean);
             if (!success) {
